@@ -1,24 +1,142 @@
-# README
+# Finance Dashboard Backend
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+A Rails API backend with JWT authentication for the Finance Dashboard application.
 
-Things you may want to cover:
+## Getting Started
 
-* Ruby version
+### Prerequisites
 
-* System dependencies
+* Ruby ~> 3.0
+* PostgreSQL
+* Bundler
 
-* Configuration
+### Installation
 
-* Database creation
+1. Install dependencies:
+```bash
+bundle install
+```
 
-* Database initialization
+2. Set up the database:
+```bash
+rails db:create db:migrate
+```
 
-* How to run the test suite
+3. Start the server:
+```bash
+bin/dev
+```
 
-* Services (job queues, cache servers, search engines, etc.)
+The server will start on `http://localhost:3000`
 
-* Deployment instructions
+## Authentication
 
-* ...
+This application uses Devise with JWT for authentication.
+
+### Sign Up
+
+Create a new user account:
+
+```bash
+POST /users
+Content-Type: application/json
+
+{
+  "user": {
+    "email": "user@example.com",
+    "password": "password123",
+    "password_confirmation": "password123",
+    "first_name": "John",
+    "last_name": "Doe"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "status": {
+    "code": 200,
+    "message": "Signed up successfully."
+  },
+  "data": {
+    "id": 1,
+    "email": "user@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "created_at": "2025-10-31T11:00:00.000Z",
+    "updated_at": "2025-10-31T11:00:00.000Z"
+  }
+}
+```
+
+### Sign In
+
+Authenticate and receive a JWT token:
+
+```bash
+POST /users/sign_in
+Content-Type: application/json
+
+{
+  "user": {
+    "email": "user@example.com",
+    "password": "password123"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "status": {
+    "code": 200,
+    "message": "Logged in successfully."
+  },
+  "data": {
+    "id": 1,
+    "email": "user@example.com",
+    "first_name": "John",
+    "last_name": "Doe",
+    "created_at": "2025-10-31T11:00:00.000Z",
+    "updated_at": "2025-10-31T11:00:00.000Z"
+  }
+}
+```
+
+The JWT token will be included in the `Authorization` header in the response.
+
+### Making Authenticated Requests
+
+Include the JWT token in subsequent requests:
+
+```bash
+Authorization: Bearer <your_jwt_token>
+```
+
+### Sign Out
+
+Revoke the current JWT token:
+
+```bash
+DELETE /users/sign_out
+Authorization: Bearer <your_jwt_token>
+```
+
+**Response:**
+```json
+{
+  "status": 200,
+  "message": "Logged out successfully."
+}
+```
+
+## API Endpoints
+
+* `POST /users` - Create a new user account
+* `POST /users/sign_in` - Sign in and receive JWT token
+* `DELETE /users/sign_out` - Sign out and revoke JWT token
+
+## License
+
+This project is proprietary software.
