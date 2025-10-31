@@ -11,10 +11,15 @@ class Users::SessionsController < Devise::SessionsController
   end
 
   def respond_to_on_destroy
+    current_user = nil
     if request.headers["Authorization"].present?
-      jwt_payload = JWT.decode(request.headers["Authorization"].split(" ").last,
-                                Rails.application.credentials.devise_jwt_secret_key || Rails.application.secret_key_base).first
-      current_user = User.find(jwt_payload["sub"])
+      begin
+        jwt_payload = JWT.decode(request.headers["Authorization"].split(" ").last,
+                                  Rails.application.credentials.devise_jwt_secret_key || Rails.application.secret_key_base).first
+        current_user = User.find(jwt_payload["sub"])
+      rescue JWT::DecodeError, ActiveRecord::RecordNotFound
+        current_user = nil
+      end
     end
 
     if current_user || signed_in?(resource_name)

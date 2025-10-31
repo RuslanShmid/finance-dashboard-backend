@@ -137,6 +137,21 @@ Authorization: Bearer <your_jwt_token>
 * `POST /users/sign_in` - Sign in and receive JWT token
 * `DELETE /users/sign_out` - Sign out and revoke JWT token
 
+## Testing
+
+This application uses RSpec for testing. To run the test suite:
+
+```bash
+bundle exec rspec
+```
+
+To run specific test files:
+
+```bash
+bundle exec rspec spec/models/
+bundle exec rspec spec/requests/
+```
+
 ## License
 
 This project is proprietary software.
