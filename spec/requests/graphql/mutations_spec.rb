@@ -70,32 +70,6 @@ RSpec.describe 'GraphQL Mutations', type: :request do
       end
     end
 
-    context 'with optional fields only' do
-      let(:variables) do
-        {
-          input: {
-            email: 'minimal@example.com',
-            password: 'password123',
-            passwordConfirmation: 'password123'
-          }
-        }
-      end
-
-      it 'creates a user without first and last name' do
-        expect do
-          post '/graphql', params: { query: query, variables: variables }
-        end.to change(User, :count).by(1)
-
-        json_response = JSON.parse(response.body)
-        data = json_response['data']['signUp']
-
-        expect(data['errors']).to be_empty
-        expect(data['user']['email']).to eq('minimal@example.com')
-        expect(data['user']['firstName']).to be_nil
-        expect(data['user']['lastName']).to be_nil
-      end
-    end
-
     context 'with invalid parameters' do
       context 'when email already exists' do
         let!(:existing_user) { create(:user, email: 'existing@example.com') }
@@ -104,7 +78,9 @@ RSpec.describe 'GraphQL Mutations', type: :request do
             input: {
               email: 'existing@example.com',
               password: 'password123',
-              passwordConfirmation: 'password123'
+              passwordConfirmation: 'password123',
+              firstName: 'John',
+              lastName: 'Doe'
             }
           }
         end
@@ -133,7 +109,9 @@ RSpec.describe 'GraphQL Mutations', type: :request do
             input: {
               email: 'mismatch@example.com',
               password: 'password123',
-              passwordConfirmation: 'different_password'
+              passwordConfirmation: 'different_password',
+              firstName: 'John',
+              lastName: 'Doe'
             }
           }
         end
@@ -162,7 +140,9 @@ RSpec.describe 'GraphQL Mutations', type: :request do
             input: {
               email: 'shortpass@example.com',
               password: '123',
-              passwordConfirmation: '123'
+              passwordConfirmation: '123',
+              firstName: 'John',
+              lastName: 'Doe'
             }
           }
         end
@@ -180,6 +160,95 @@ RSpec.describe 'GraphQL Mutations', type: :request do
           data = json_response['data']['signUp']
 
           expect(data['errors']).not_to be_empty
+        end
+      end
+
+      context 'when first_name is missing' do
+        let(:variables) do
+          {
+            input: {
+              email: 'nofirstname@example.com',
+              password: 'password123',
+              passwordConfirmation: 'password123',
+              lastName: 'Doe'
+            }
+          }
+        end
+
+        it 'does not create a new user' do
+          expect do
+            post '/graphql', params: { query: query, variables: variables }
+          end.not_to change(User, :count)
+        end
+
+        it 'returns errors' do
+          post '/graphql', params: { query: query, variables: variables }
+
+          json_response = JSON.parse(response.body)
+          data = json_response['data']['signUp']
+
+          expect(data['errors']).not_to be_empty
+          expect(data['user']).to be_nil
+          expect(data['token']).to be_nil
+        end
+      end
+
+      context 'when last_name is missing' do
+        let(:variables) do
+          {
+            input: {
+              email: 'nolastname@example.com',
+              password: 'password123',
+              passwordConfirmation: 'password123',
+              firstName: 'John'
+            }
+          }
+        end
+
+        it 'does not create a new user' do
+          expect do
+            post '/graphql', params: { query: query, variables: variables }
+          end.not_to change(User, :count)
+        end
+
+        it 'returns errors' do
+          post '/graphql', params: { query: query, variables: variables }
+
+          json_response = JSON.parse(response.body)
+          data = json_response['data']['signUp']
+
+          expect(data['errors']).not_to be_empty
+          expect(data['user']).to be_nil
+          expect(data['token']).to be_nil
+        end
+      end
+
+      context 'when both first_name and last_name are missing' do
+        let(:variables) do
+          {
+            input: {
+              email: 'noname@example.com',
+              password: 'password123',
+              passwordConfirmation: 'password123'
+            }
+          }
+        end
+
+        it 'does not create a new user' do
+          expect do
+            post '/graphql', params: { query: query, variables: variables }
+          end.not_to change(User, :count)
+        end
+
+        it 'returns errors' do
+          post '/graphql', params: { query: query, variables: variables }
+
+          json_response = JSON.parse(response.body)
+          data = json_response['data']['signUp']
+
+          expect(data['errors']).not_to be_empty
+          expect(data['user']).to be_nil
+          expect(data['token']).to be_nil
         end
       end
     end
@@ -292,8 +361,8 @@ RSpec.describe 'GraphQL Mutations', type: :request do
   describe 'signOut mutation' do
     let(:query) do
       <<~GQL
-        mutation SignOut($input: SignOutInput!) {
-          signOut(input: $input) {
+        mutation {
+          signOut(input: {}) {
             success
             message
             errors
@@ -306,26 +375,22 @@ RSpec.describe 'GraphQL Mutations', type: :request do
 
     context 'with valid authentication' do
       let(:token) do
-        # First sign in to get a token
-        sign_in_query = <<~GQL
-          mutation SignIn($input: SignInInput!) {
-            signIn(input: $input) {
-              token
-            }
-          }
-        GQL
+        # Generate token directly using the same method as sign_in mutation
+        secret = Rails.application.credentials.devise_jwt_secret_key || Rails.application.secret_key_base
+        expiration = 1.day.from_now.to_i
+        jti = SecureRandom.uuid
 
-        post '/graphql', params: {
-          query: sign_in_query,
-          variables: { input: { email: 'test@example.com', password: 'password123' } }
+        payload = {
+          sub: user.id,
+          exp: expiration,
+          jti: jti
         }
 
-        json_response = JSON.parse(response.body)
-        json_response['data']['signIn']['token']
+        JWT.encode(payload, secret)
       end
 
       it 'signs out successfully' do
-        post '/graphql', params: { query: query, variables: { input: {} } }, headers: { 'Authorization' => "Bearer #{token}" }
+        post '/graphql', params: { query: query }, headers: { 'Authorization' => "Bearer #{token}" }
 
         json_response = JSON.parse(response.body)
         data = json_response['data']['signOut']
@@ -337,12 +402,12 @@ RSpec.describe 'GraphQL Mutations', type: :request do
 
       it 'adds token to denylist' do
         expect do
-          post '/graphql', params: { query: query, variables: { input: {} } }, headers: { 'Authorization' => "Bearer #{token}" }
+          post '/graphql', params: { query: query }, headers: { 'Authorization' => "Bearer #{token}" }
         end.to change(JwtDenylist, :count).by(1)
       end
 
       it 'extracts jti from token and stores it' do
-        post '/graphql', params: { query: query, variables: { input: {} } }, headers: { 'Authorization' => "Bearer #{token}" }
+        post '/graphql', params: { query: query }, headers: { 'Authorization' => "Bearer #{token}" }
 
         secret = Rails.application.credentials.devise_jwt_secret_key || Rails.application.secret_key_base
         decoded = JWT.decode(token, secret, true, algorithm: 'HS256')
@@ -354,7 +419,7 @@ RSpec.describe 'GraphQL Mutations', type: :request do
 
     context 'without authentication' do
       it 'returns error when no token is provided' do
-        post '/graphql', params: { query: query, variables: { input: {} } }
+        post '/graphql', params: { query: query }
 
         json_response = JSON.parse(response.body)
         data = json_response['data']['signOut']
@@ -366,7 +431,7 @@ RSpec.describe 'GraphQL Mutations', type: :request do
 
       it 'does not add anything to denylist' do
         expect do
-          post '/graphql', params: { query: query, variables: { input: {} } }
+          post '/graphql', params: { query: query }
         end.not_to change(JwtDenylist, :count)
       end
     end
@@ -375,7 +440,7 @@ RSpec.describe 'GraphQL Mutations', type: :request do
       let(:invalid_token) { 'invalid.token.here' }
 
       it 'returns error for invalid token' do
-        post '/graphql', params: { query: query, variables: { input: {} } }, headers: { 'Authorization' => "Bearer #{invalid_token}" }
+        post '/graphql', params: { query: query }, headers: { 'Authorization' => "Bearer #{invalid_token}" }
 
         json_response = JSON.parse(response.body)
         data = json_response['data']['signOut']
@@ -388,30 +453,27 @@ RSpec.describe 'GraphQL Mutations', type: :request do
 
     context 'when token is already in denylist' do
       let(:token) do
-        sign_in_query = <<~GQL
-          mutation SignIn($input: SignInInput!) {
-            signIn(input: $input) {
-              token
-            }
-          }
-        GQL
+        # Generate token directly using the same method as sign_in mutation
+        secret = Rails.application.credentials.devise_jwt_secret_key || Rails.application.secret_key_base
+        expiration = 1.day.from_now.to_i
+        jti = SecureRandom.uuid
 
-        post '/graphql', params: {
-          query: sign_in_query,
-          variables: { input: { email: 'test@example.com', password: 'password123' } }
+        payload = {
+          sub: user.id,
+          exp: expiration,
+          jti: jti
         }
 
-        json_response = JSON.parse(response.body)
-        json_response['data']['signIn']['token']
+        JWT.encode(payload, secret)
       end
 
       before do
         # Sign out once to add to denylist
-        post '/graphql', params: { query: query, variables: { input: {} } }, headers: { 'Authorization' => "Bearer #{token}" }
+        post '/graphql', params: { query: query }, headers: { 'Authorization' => "Bearer #{token}" }
       end
 
       it 'allows signing out again (idempotent)' do
-        post '/graphql', params: { query: query, variables: { input: {} } }, headers: { 'Authorization' => "Bearer #{token}" }
+        post '/graphql', params: { query: query }, headers: { 'Authorization' => "Bearer #{token}" }
 
         json_response = JSON.parse(response.body)
         data = json_response['data']['signOut']
